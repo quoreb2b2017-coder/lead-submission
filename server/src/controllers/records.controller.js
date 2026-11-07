@@ -1,6 +1,20 @@
 import ExcelJS from "exceljs";
 import Lead from "../models/Lead.js";
-import { CUSTOM_QUESTION, FORM_FIELDS, getCampaign } from "../config/campaigns.js";
+import { CUSTOM_QUESTION, FORM_FIELDS, deliveryOf, getCampaign } from "../config/campaigns.js";
+
+// LeadHub's copy of a lead submitted through the client's BuyerZone Scout form
+const SCOUT_COLUMNS = [
+  { key: "email", label: "Email" },
+  { key: "first_name", label: "First name" },
+  { key: "last_name", label: "Last name" },
+  { key: "phone_number", label: "Phone" },
+  { key: "company_name", label: "Company" },
+  { key: "postal_code", label: "Zip / postal code" },
+  { key: "answers", label: "Other answers" },
+  { key: "conversion", label: "Conversion" },
+  { key: "scout_embed_id", label: "Scout embed id", hidden: true },
+  { key: "scout_source_id", label: "Scout source id", hidden: true },
+];
 
 const TZ_OFFSET = "+05:30"; // months are counted in India time
 const MONTH_RX = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -17,6 +31,14 @@ const fmtDateTime = (d) =>
 
 /** Sheet columns: meta columns, then every field exactly as posted to the relay. */
 export function sheetColumns(campaign) {
+  if (deliveryOf(campaign) === "scout") {
+    return [
+      { key: "_n", label: "#", meta: true },
+      { key: "_submittedAt", label: "Submitted at", meta: true },
+      { key: "_by", label: "Submitted by", meta: true },
+      ...SCOUT_COLUMNS,
+    ];
+  }
   const fieldCodes = [...FORM_FIELDS.map((f) => ({ key: f.code, label: f.label })), { key: CUSTOM_QUESTION.code, label: "Timeframe to decision" }];
   const taken = new Set(fieldCodes.map((c) => c.key));
   const hidden = Object.keys(campaign.hidden)
@@ -154,9 +176,9 @@ export const exportMonthSheet = async (req, res) => {
   rows.forEach((r) => {
     const row = ws.addRow(columns.map((c) => r[c.key] ?? ""));
     row.font = { size: 10 };
-    const statusCell = row.getCell(3);
+    const statusCol = columns.findIndex((c) => c.key === "_status");
     const colors = { sent: "FF047857", dry_run: "FFB45309", failed: "FFB91C1C" };
-    if (colors[r._statusKey]) statusCell.font = { size: 10, bold: true, color: { argb: colors[r._statusKey] } };
+    if (statusCol >= 0 && colors[r._statusKey]) row.getCell(statusCol + 1).font = { size: 10, bold: true, color: { argb: colors[r._statusKey] } };
   });
 
   columns.forEach((c, i) => {

@@ -149,9 +149,55 @@ export const CAMPAIGNS = {
       timeframe_to_decision: "",
     },
   },
+
+  // ── BuyerZone Scout campaigns ───────────────────────────────────────────
+  // The client's Scout form (BuyerZone, replaces the retired Java widget on Oct 15, 2026) is embedded
+  // in LeadHub and submits straight to BuyerZone. When Scout confirms a submission (onConversion),
+  // LeadHub saves its own copy of the lead, so targets, records and the dashboard include these too.
+  fleet: {
+    key: "fleet",
+    name: "GPS Fleet Tracking Solutions",
+    shortName: "GPS Fleet",
+    category: "GPS Fleet Tracking",
+    leadSource: "BuyerZone Scout · GPS Fleet",
+    delivery: "scout",
+    scout: { embedId: "20038", sourceId: "14588", configName: "GPS Fleet Tracking Solutions" },
+    asset: {
+      eyebrow: "BuyerZone Scout",
+      title: "GPS Fleet Tracking Solutions — BuyerZone Scout form",
+      tagline: "GPS Fleet Tracking",
+      description: "Client form (BuyerZone Scout, Embed ID 20038). Leads go to BuyerZone; LeadHub keeps a copy of each one.",
+      features: [],
+      image: null,
+      vendors: [],
+    },
+    hidden: { scout_embed_id: "20038", scout_source_id: "14588" },
+  },
+  payroll: {
+    key: "payroll",
+    name: "Payroll Services",
+    shortName: "Payroll",
+    category: "Payroll Services",
+    leadSource: "BuyerZone Scout · Payroll",
+    delivery: "scout",
+    scout: { embedId: "20054", sourceId: "14588", configName: "Payroll Services" },
+    asset: {
+      eyebrow: "BuyerZone Scout",
+      title: "Payroll Services — BuyerZone Scout form",
+      tagline: "Payroll Services",
+      description: "Client form (BuyerZone Scout, Embed ID 20054). Leads go to BuyerZone; LeadHub keeps a copy of each one.",
+      features: [],
+      image: null,
+      vendors: [],
+    },
+    hidden: { scout_embed_id: "20054", scout_source_id: "14588" },
+  },
 };
 
 export const getCampaign = (key) => CAMPAIGNS[key] || null;
+
+/** "selecthub" (posted to the SelectHub relay) or "scout" (client's BuyerZone Scout form, copy kept in LeadHub). */
+export const deliveryOf = (campaign) => campaign.delivery || "selecthub";
 
 const escapeRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -181,4 +227,6 @@ export const describeCampaign = (c) => ({
   hidden: c.hidden,
   competitors: c.competitors || [],
   thankYou: c.thankYou || null,
+  delivery: deliveryOf(c),
+  scout: c.scout || null,
 });

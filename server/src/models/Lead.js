@@ -21,7 +21,8 @@ const relaySchema = new mongoose.Schema(
 const leadSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, lowercase: true, trim: true },
+    // Scout copies are captured from the client's form, so a field may occasionally be missing
+    email: { type: String, required: [function () { return !this.scoutRef; }, "Email is required"], lowercase: true, trim: true },
     phone: { type: String, trim: true },
     company: { type: String, trim: true },
     source: { type: String, trim: true, default: "website" },
@@ -30,11 +31,15 @@ const leadSchema = new mongoose.Schema(
 
     // Lead-submission (relay) fields
     campaign: { type: String, trim: true, index: true },
+    scoutRef: { type: String, trim: true }, // one id per Scout submission (copy of a BuyerZone Scout lead)
     formData: { type: mongoose.Schema.Types.Mixed },
     relay: { type: relaySchema, default: undefined },
     submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
+
+// One LeadHub copy per Scout submission, even if the page reports it twice
+leadSchema.index({ campaign: 1, scoutRef: 1 }, { unique: true, partialFilterExpression: { scoutRef: { $type: "string" } } });
 
 export default mongoose.model("Lead", leadSchema);

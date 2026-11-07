@@ -5,6 +5,7 @@ import {
   listSubmissions,
   retrySubmission,
   bulkDeleteSubmissions,
+  recordScoutConversion,
 } from "../controllers/submission.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 
@@ -15,6 +16,7 @@ router.get("/config", getSubmissionConfig);
 router.get("/", listSubmissions);
 router.post("/bulk-delete", bulkDeleteSubmissions);
 router.post("/:campaign", createSubmission);
+router.post("/:campaign/scout", recordScoutConversion);
 router.post("/:id/retry", retrySubmission);
 
 export default router;

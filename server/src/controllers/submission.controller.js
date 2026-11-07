@@ -6,6 +6,7 @@ import {
   FORM_FIELDS,
   findCompetitor,
   describeCampaign,
+  deliveryOf,
   getCampaign,
 } from "../config/campaigns.js";
 import { sendToRelay } from "../services/relay.service.js";
@@ -60,6 +61,9 @@ function buildPayload(campaign, clean) {
 export const createSubmission = async (req, res) => {
   const campaign = getCampaign(req.params.campaign);
   if (!campaign) return res.status(404).json({ success: false, message: "Unknown campaign" });
+  if (deliveryOf(campaign) === "scout") {
+    return res.status(400).json({ success: false, message: `${campaign.shortName} leads are submitted through the BuyerZone Scout form` });
+  }
 
   const { errors, clean } = validate(req.body || {});
   if (Object.keys(errors).length) {
@@ -128,6 +132,9 @@ export const retrySubmission = async (req, res) => {
   if (lead.relay.status === "sent") {
     return res.status(400).json({ success: false, message: "This lead was already sent to the client" });
   }
+  if (lead.scoutRef) {
+    return res.status(400).json({ success: false, message: "Scout leads are submitted through the BuyerZone Scout form" });
+  }
   lead.relay = await sendToRelay(lead.relay.payload);
   await lead.save();
   const ok = lead.relay.status !== "failed";
@@ -136,6 +143,104 @@ export const retrySubmission = async (req, res) => {
     message: ok ? `Relay status: ${lead.relay.status}` : `Relay failed again: ${lead.relay.error}`,
     lead,
   });
+};
+
+const SCOUT_REF_RX = /^[A-Za-z0-9_-]{8,80}$/;
+const norm = (k) => String(k).toLowerCase().replace(/[^a-z]/g, "");
+
+/** Picks the contact details out of whatever field names the Scout form uses. */
+function scoutContact(fields) {
+  const find = (test) => {
+    const hit = Object.entries(fields).find(([k, v]) => v && test(norm(k)));
+    return hit ? hit[1] : "";
+  };
+  return {
+    email: find((k) => k.includes("email")),
+    firstName: find((k) => k === "firstname" || k === "fname" || k === "givenname"),
+    lastName: find((k) => k === "lastname" || k === "lname" || k === "surname" || k === "familyname"),
+    phone: find((k) => k.includes("phone") || k === "tel" || k.includes("mobile")),
+    postalCode: find((k) => k.includes("postal") || k.includes("zip")),
+    company: find((k) => k.includes("company") || k.includes("business") || k.includes("organization")),
+  };
+}
+
+/**
+ * POST /api/submissions/:campaign/scout { ref, upsell?, fields: { <form field>: <value> } }
+ * Called by the LeadHub page when the client's BuyerZone Scout form confirms a submission (onConversion).
+ * The lead already went to BuyerZone; this saves LeadHub's copy. Idempotent per `ref`.
+ */
+export const recordScoutConversion = async (req, res) => {
+  const campaign = getCampaign(req.params.campaign);
+  if (!campaign || deliveryOf(campaign) !== "scout") {
+    return res.status(404).json({ success: false, message: "Unknown Scout campaign" });
+  }
+  const body = req.body || {};
+  const ref = String(body.ref || "");
+  if (!SCOUT_REF_RX.test(ref)) return res.status(400).json({ success: false, message: "Missing submission reference" });
+
+  // Captured form values: plain strings only, bounded in size
+  const fields = {};
+  for (const [k, v] of Object.entries(body.fields && typeof body.fields === "object" ? body.fields : {}).slice(0, 60)) {
+    const key = String(k).trim().slice(0, 80);
+    const value = String(v ?? "").trim().slice(0, 300);
+    if (key && value) fields[key] = value;
+  }
+
+  const existing = await Lead.findOne({ campaign: campaign.key, scoutRef: ref }).populate("submittedBy", "name email");
+  if (existing) return res.json({ success: true, duplicate: true, message: "Already saved", lead: existing });
+
+  const c = scoutContact(fields);
+  const email = EMAIL_RX.test(c.email) ? c.email : "";
+  const name = `${c.firstName} ${c.lastName}`.trim() || (email ? email.split("@")[0] : `${campaign.shortName} lead`);
+  const contactValues = new Set(Object.values(c).filter(Boolean));
+  const answers = Object.entries(fields)
+    .filter(([, v]) => !contactValues.has(v))
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(" · ");
+  const upsell = Boolean(body.upsell);
+  const payload = {
+    email,
+    first_name: c.firstName,
+    last_name: c.lastName,
+    phone_number: c.phone,
+    postal_code: c.postalCode,
+    company_name: c.company,
+    answers,
+    conversion: upsell ? "additional offer" : "primary",
+    ...campaign.hidden,
+  };
+
+  let lead;
+  try {
+    lead = await Lead.create({
+      name,
+      email: email || undefined,
+      phone: c.phone,
+      company: c.company,
+      source: campaign.leadSource,
+      message: `${campaign.scout.configName} · submitted through the BuyerZone Scout form${upsell ? " (additional offer)" : ""}`,
+      campaign: campaign.key,
+      scoutRef: ref,
+      formData: { fields, contact: c, upsell },
+      relay: {
+        mode: "live",
+        status: "sent",
+        url: "BuyerZone Scout",
+        payload,
+        response: `BuyerZone Scout confirmed the submission · embed ${campaign.scout.embedId} · source ${campaign.scout.sourceId}`,
+        sentAt: new Date(),
+      },
+      submittedBy: req.user._id,
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      const again = await Lead.findOne({ campaign: campaign.key, scoutRef: ref });
+      return res.json({ success: true, duplicate: true, message: "Already saved", lead: again });
+    }
+    throw err;
+  }
+
+  res.status(201).json({ success: true, message: `${campaign.shortName} lead sent to BuyerZone · copy saved in LeadHub`, lead });
 };
 
 export const listSubmissions = async (req, res) => {
