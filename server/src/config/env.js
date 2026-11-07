@@ -45,6 +45,9 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || "7d",
   COOKIE_NAME: process.env.COOKIE_NAME || "token",
+  // Secure (HTTPS-only) auth cookie. Defaults to on in production; set COOKIE_SECURE=false only
+  // while the site is served over plain HTTP (e.g. a bare IP before a domain + SSL is set up).
+  COOKIE_SECURE: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : isProd,
   // Brute-force protection for /api/auth/login: attempts per IP per 15 minutes
   LOGIN_MAX_ATTEMPTS: Number(process.env.LOGIN_MAX_ATTEMPTS) || 10,
   // Lead relay. Anything other than RELAY_MODE=live is a dry run (nothing is sent).
