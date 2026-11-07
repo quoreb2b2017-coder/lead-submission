@@ -1,0 +1,6 @@
+# Elastic Beanstalk upload: never ship local secrets or modules (EB runs npm install itself)
+node_modules
+.env
+.env.*
+!.env.example
+.git

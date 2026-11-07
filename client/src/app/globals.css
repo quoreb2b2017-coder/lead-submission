@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7fb;
+  --foreground: #0f172a;
+
+  /* Chart roles (validated: ordinal blue ramp + neutral) */
+  --series-1: #2a78d6;
+  --stage-new: #86b6ef;
+  --stage-contacted: #5598e7;
+  --stage-qualified: #2a78d6;
+  --stage-converted: #1c5cab;
+  --stage-lost: #b4b2a9;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-slide-in-right: slide-in-right 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-blob: blob 18s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes blob {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(40px, -50px) scale(1.1); }
+    66% { transform: translate(-30px, 30px) scale(0.95); }
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(24px) scale(0.92); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+  }
+  @keyframes toast-out {
+    to { opacity: 0; transform: translateX(24px) scale(0.96); }
+  }
+  @keyframes toast-progress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes shimmer {
+    from { background-position: -400px 0; }
+    to { background-position: 400px 0; }
+  }
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #eef0f4 0px, #f7f8fa 160px, #eef0f4 320px);
+  background-size: 800px 100%;
+  animation: var(--animate-shimmer);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-xl border border-slate-200 bg-white py-3 text-[15px] text-slate-900 shadow-sm shadow-slate-900/[0.03] transition placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10;
+  }
+}
