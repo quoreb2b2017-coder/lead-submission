@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, Download, Folder, 
 import { createPortal } from "react-dom";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CAMPAIGN_NAV } from "@/lib/campaignNav";
+import CampaignComingSoon from "@/components/submit/CampaignComingSoon";
 import { Skeleton } from "@/components/ui/Card";
 import SheetTable from "@/components/records/SheetTable";
 import Spinner from "@/components/Spinner";
@@ -26,6 +27,8 @@ const nowIST = () => {
 };
 
 export default function RecordsView({ campaignKey }) {
+  const nav = CAMPAIGN_NAV.find((c) => c.key === campaignKey);
+  if (nav && !nav.enabled) return <CampaignComingSoon label={nav.label} />;
   return (
     <Suspense fallback={<Skeleton className="h-[600px] rounded-xl" />}>
       <Records campaignKey={campaignKey} />
@@ -37,6 +40,8 @@ function Records({ campaignKey }) {
   const params = useSearchParams();
   const toast = useToast();
   const nav = CAMPAIGN_NAV.find((c) => c.key === campaignKey);
+  // Scout campaigns go through the client's BuyerZone form: no relay, so no relay status / dry runs
+  const isScout = nav?.delivery === "scout";
   const current = nowIST();
   const initialMonth = /^\d{4}-\d{2}$/.test(params.get("month") || "") ? params.get("month") : current;
 
@@ -155,13 +160,25 @@ function Records({ campaignKey }) {
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
       {/* Year totals */}
-      <div className="grid grid-cols-2 rounded-xl border border-slate-200 bg-white sm:grid-cols-4 [&>div]:border-slate-200 [&>div:nth-child(odd)]:border-r sm:[&>div:not(:last-child)]:border-r [&>div:nth-child(-n+2)]:border-b sm:[&>div]:border-b-0">
-        {[
-          ["Total in " + year, summary?.totals.total],
-          ["Sent to client", summary?.totals.sent],
-          ["Dry runs", summary?.totals.dryRun],
-          ["Failed", summary?.totals.failed],
-        ].map(([label, v]) => (
+      <div
+        className={
+          isScout
+            ? "grid grid-cols-2 rounded-xl border border-slate-200 bg-white [&>div:first-child]:border-r [&>div]:border-slate-200"
+            : "grid grid-cols-2 rounded-xl border border-slate-200 bg-white sm:grid-cols-4 [&>div]:border-slate-200 [&>div:nth-child(odd)]:border-r sm:[&>div:not(:last-child)]:border-r [&>div:nth-child(-n+2)]:border-b sm:[&>div]:border-b-0"
+        }
+      >
+        {(isScout
+          ? [
+              ["Total in " + year, summary?.totals.total],
+              [`In ${MONTHS[monthIdx]}`, summary?.months.find((m) => m.month === month)?.total],
+            ]
+          : [
+              ["Total in " + year, summary?.totals.total],
+              ["Sent to client", summary?.totals.sent],
+              ["Dry runs", summary?.totals.dryRun],
+              ["Failed", summary?.totals.failed],
+            ]
+        ).map(([label, v]) => (
           <div key={label} className="px-4 py-3 sm:px-5">
             <p className="text-xs font-medium text-slate-500">{label}</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{v ?? "–"}</p>
@@ -202,7 +219,7 @@ function Records({ campaignKey }) {
                     <p className={`text-xs tabular-nums ${future ? "text-slate-300" : "text-slate-500"}`}>
                       {future ? "Upcoming" : `${m.total} lead${m.total === 1 ? "" : "s"}`}
                     </p>
-                    {!future && m.total > 0 && (
+                    {!future && m.total > 0 && !isScout && (
                       <p className="mt-1.5 text-[11px] tabular-nums text-slate-500">
                         <span className="text-emerald-700">{m.sent} sent</span>
                         {m.dryRun > 0 && <span> · {m.dryRun} dry</span>}
@@ -227,7 +244,11 @@ function Records({ campaignKey }) {
               {MONTHS[monthIdx]} {month.slice(0, 4)}
               <span className="ml-2 font-mono text-xs font-normal text-slate-500">{shortName}-leads-{month}.xlsx</span>
             </h3>
-            <p className="text-xs text-slate-500">All fields exactly as posted to the relay, including hidden campaign fields.</p>
+            <p className="text-xs text-slate-500">
+              {isScout
+                ? "LeadHub's copy of every lead submitted through the client's BuyerZone Scout form."
+                : "All fields exactly as posted to the relay, including hidden campaign fields."}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
@@ -244,7 +265,7 @@ function Records({ campaignKey }) {
                 </button>
               )}
             </div>
-            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
+            <div className={`${isScout ? "hidden" : "flex"} rounded-lg border border-slate-200 bg-white p-0.5`}>
               {STATUS_FILTERS.map((s) => (
                 <button
                   key={s.key}

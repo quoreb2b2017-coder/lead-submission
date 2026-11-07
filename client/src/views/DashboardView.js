@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, FolderOpen, Inbox, RefreshCw, Send, Trophy } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, FolderOpen, Inbox, RefreshCw, Send, Trophy } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { timeAgo } from "@/lib/leads";
 import { CAMPAIGN_NAV } from "@/lib/campaignNav";
@@ -75,7 +75,11 @@ function Empty({ text = "No submissions in this period yet." }) {
 
 export default function DashboardView() {
   const { user } = useAuth();
-  const [campaign, setCampaign] = useState(() => (typeof window === "undefined" ? "all" : localStorage.getItem("dashboard-campaign") || "all"));
+  const [campaign, setCampaign] = useState(() => {
+    const saved = typeof window === "undefined" ? null : localStorage.getItem("dashboard-campaign");
+    // A remembered campaign that has since been disabled falls back to "all"
+    return saved && CAMPAIGNS.some((c) => c.key === saved) ? saved : "all";
+  });
   const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -116,33 +120,21 @@ export default function DashboardView() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={campaign}
-            onChange={(e) => pickCampaign(e.target.value)}
-            aria-label="Campaign"
-            className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 sm:hidden"
-          >
-            <option value="all">All campaigns</option>
-            {CAMPAIGNS.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <div className="hidden max-w-full overflow-x-auto rounded-lg border border-slate-200 bg-white p-0.5 sm:flex" role="tablist" aria-label="Campaign">
-            {[{ key: "all", shortName: "All campaigns" }, ...CAMPAIGNS].map((c) => (
-              <button
-                key={c.key}
-                role="tab"
-                aria-selected={campaign === c.key}
-                onClick={() => pickCampaign(c.key)}
-                className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  campaign === c.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {c.key === "all" ? c.shortName : c.label}
-              </button>
-            ))}
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <select
+              value={campaign}
+              onChange={(e) => pickCampaign(e.target.value)}
+              aria-label="Campaign"
+              className="h-9 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm font-medium text-slate-800 outline-none transition hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+            >
+              <option value="all">All campaigns</option>
+              {CAMPAIGN_NAV.map((c) => (
+                <option key={c.key} value={c.key} disabled={!c.enabled}>
+                  {c.enabled ? c.label : `${c.label} · coming soon`}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
           <div className="flex rounded-lg border border-slate-200 bg-white p-0.5" aria-label="Date range">
             {RANGES.map((r) => (
@@ -217,7 +209,7 @@ export default function DashboardView() {
 
       {/* Trend + campaigns */}
       <div className="grid gap-4 lg:grid-cols-3 xl:gap-5">
-        <Panel title="Submissions per day" subtitle={`Last ${days} days, by relay status`} className="lg:col-span-2">
+        <Panel title="Submissions per day" subtitle={selected?.delivery === "scout" ? `Last ${days} days` : `Last ${days} days, by relay status`} className="lg:col-span-2">
           {loading ? <Skeleton className="h-[220px]" /> : hasData ? <StackedBars data={data.timeseries} series={STATUS_SERIES} height={190} /> : <Empty />}
         </Panel>
 

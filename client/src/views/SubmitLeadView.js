@@ -27,6 +27,8 @@ import { apiFetch } from "@/lib/api";
 import { CAMPAIGN_NAV } from "@/lib/campaignNav";
 import { Skeleton } from "@/components/ui/Card";
 import LeadForm from "@/components/submit/LeadForm";
+import ScoutWidget from "@/components/submit/ScoutWidget";
+import CampaignComingSoon from "@/components/submit/CampaignComingSoon";
 import TargetCard from "@/components/submit/TargetCard";
 import SheetTable from "@/components/records/SheetTable";
 import Spinner from "@/components/Spinner";
@@ -65,6 +67,12 @@ export default function SubmitLeadView({ campaignKey = "hris" }) {
   const campaign = config?.campaigns.find((c) => c.key === campaignKey);
   const live = config?.relay.mode === "live";
   const recordsHref = `${nav?.href || `/dashboard/submit/${campaignKey}`}/records`;
+
+  if (nav && !nav.enabled) return <CampaignComingSoon label={nav.label} />;
+
+  if (campaign?.delivery === "scout") {
+    return <ScoutSubmitView campaign={campaign} recordsHref={recordsHref} />;
+  }
 
   return (
     <div className="space-y-4 xl:space-y-5">
@@ -655,7 +663,19 @@ const istMonth = (d) => {
   return `${p.find((x) => x.type === "year").value}-${p.find((x) => x.type === "month").value}`;
 };
 
-function RecentSubmissions({ campaignKey, shortName, recordsHref, refreshKey }) {
+const SCOUT_RECENT_COLUMNS = [
+  { key: "email", label: "Email" },
+  { key: "first_name", label: "First name", width: 110 },
+  { key: "last_name", label: "Last name", width: 110 },
+  { key: "phone_number", label: "Phone" },
+  { key: "company_name", label: "Company" },
+  { key: "postal_code", label: "Zip", width: 90 },
+  { key: "conversion", label: "Conversion", width: 120 },
+  { key: "_submittedAt", label: "Submitted at", meta: true, width: 160 },
+  { key: "_by", label: "Submitted by", meta: true, width: 110 },
+];
+
+function RecentSubmissions({ campaignKey, shortName, recordsHref, refreshKey, columns = RECENT_COLUMNS }) {
   const router = useRouter();
   const [rows, setRows] = useState(null);
 
@@ -705,7 +725,7 @@ function RecentSubmissions({ campaignKey, shortName, recordsHref, refreshKey }) 
           <Skeleton className="h-56 rounded-lg" />
         ) : (
           <SheetTable
-            columns={RECENT_COLUMNS}
+            columns={columns}
             rows={rows}
             sheetName={`${shortName} · Recent`}
             maxHeight={360}
@@ -715,5 +735,182 @@ function RecentSubmissions({ campaignKey, shortName, recordsHref, refreshKey }) 
         )}
       </div>
     </section>
+  );
+}
+
+/* ───────────────────────── BuyerZone Scout campaigns (GPS Fleet, Payroll) ───────────────────────── */
+
+function ScoutSubmitView({ campaign, recordsHref }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [saved, setSaved] = useState(null); // last copy saved in LeadHub (or the error)
+  const { scout } = campaign;
+
+  const openForm = () => {
+    setSaved(null);
+    setFormKey((k) => k + 1); // fresh, empty Scout form every time
+    setOpen(true);
+  };
+
+  // "N" opens a new lead form (when not typing somewhere)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key.toLowerCase() !== "n" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+      e.preventDefault();
+      setSaved(null);
+      setFormKey((k) => k + 1);
+      setOpen(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Scout confirmed the submission → save LeadHub's copy (retries a few times so a copy isn't lost)
+  const onConversion = async ({ ref, upsell, fields }) => {
+    const body = JSON.stringify({ ref, upsell, fields });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await apiFetch(`/submissions/${campaign.key}/scout`, { method: "POST", body });
+        setSaved({ ok: true, lead: res.lead });
+        setRefreshKey((k) => k + 1);
+        if (!res.duplicate) toast(res.lead?.email || res.lead?.name || "", "success", { title: `${campaign.shortName} lead submitted · copy saved` });
+        return;
+      } catch (err) {
+        if (attempt === 3 || (err.status && err.status < 500)) {
+          setSaved({ ok: false, message: err.message });
+          toast(err.message, "error", { title: "Sent to BuyerZone, but the LeadHub copy was not saved" });
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-4 xl:space-y-5">
+      <header className="flex flex-col gap-3 border-b border-slate-200 pb-4 md:flex-row md:items-center md:justify-between md:gap-6">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+            Lead capture <span className="mx-1 text-slate-300">/</span> BuyerZone Scout
+          </p>
+          <div className="mt-1 flex min-w-0 items-center gap-2.5">
+            <h2 className="truncate text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">{campaign.name}</h2>
+            <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live · BuyerZone
+            </span>
+          </div>
+          <p className="mt-0.5 hidden truncate text-sm text-slate-500 lg:block">
+            Enter the prospect in the client&apos;s Scout form. It goes to BuyerZone and a copy is saved in LeadHub.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={recordsHref}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            <FolderOpen className="h-4 w-4 text-slate-500" /> Records
+          </Link>
+          <button
+            onClick={openForm}
+            className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+          >
+            <Plus className="h-4 w-4" /> New lead
+            <kbd className="hidden rounded border border-white/30 px-1 font-mono text-[10px] text-indigo-100 lg:inline">N</kbd>
+          </button>
+        </div>
+      </header>
+
+      <TargetCard campaignKey={campaign.key} refreshKey={refreshKey} />
+
+      <section className={`${PANEL} flex flex-col gap-3 p-3.5 lg:flex-row lg:items-center`}>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-slate-900">{campaign.asset.title}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {[
+              ["Form", "BuyerZone Scout"],
+              ["Embed ID", scout.embedId],
+              ["Source ID", scout.sourceId],
+              ["Configuration", scout.configName],
+            ].map(([k, v]) => (
+              <span key={k} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-600">
+                <span className="text-slate-400">{k}</span> <span className="font-medium text-slate-700">{v}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <button
+        onClick={openForm}
+        className="group flex w-full items-center gap-4 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 px-5 py-4 text-left transition hover:border-indigo-400 hover:bg-indigo-50"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm transition group-hover:scale-105">
+          <Plus className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-900">Submit a new {campaign.shortName} lead</span>
+          <span className="block text-xs text-slate-500">Opens the client&apos;s Scout form in a side panel · a copy of every submitted lead is saved here</span>
+        </span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-indigo-500 transition group-hover:translate-x-0.5" />
+      </button>
+
+      <LeadDrawer open={open} onClose={() => setOpen(false)}>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600">{campaign.shortName} · New lead · BuyerZone Scout</p>
+            <h3 className="truncate text-base font-semibold text-slate-900">{campaign.name}</h3>
+          </div>
+          <button
+            onClick={() => setOpen(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close form"
+          >
+            <XCircle className="h-5 w-5" />
+          </button>
+        </div>
+        {saved && (
+          <div
+            className={`flex shrink-0 items-center gap-3 border-b px-4 py-3 sm:px-5 ${saved.ok ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}
+            role="status"
+          >
+            {saved.ok ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /> : <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />}
+            <p className={`min-w-0 flex-1 text-sm ${saved.ok ? "text-emerald-800" : "text-red-700"}`}>
+              {saved.ok ? (
+                <>
+                  Submitted to BuyerZone · copy saved in LeadHub
+                  {saved.lead?.email ? <span className="font-medium"> ({saved.lead.email})</span> : null}
+                </>
+              ) : (
+                `Sent to BuyerZone, but the LeadHub copy was not saved: ${saved.message}`
+              )}
+            </p>
+            <button
+              onClick={openForm}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Next lead
+            </button>
+          </div>
+        )}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
+          {open && (
+            <div className="mx-auto max-w-[480px]">
+              <ScoutWidget key={formKey} embedId={scout.embedId} sourceId={scout.sourceId} onConversion={onConversion} />
+            </div>
+          )}
+        </div>
+      </LeadDrawer>
+
+      <RecentSubmissions
+        campaignKey={campaign.key}
+        shortName={campaign.shortName}
+        recordsHref={recordsHref}
+        refreshKey={refreshKey}
+        columns={SCOUT_RECENT_COLUMNS}
+      />
+    </div>
   );
 }
